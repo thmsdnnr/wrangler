@@ -2,6 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use indicatif::{ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
 
 use crate::build::build_target;
 use crate::deploy;
@@ -14,10 +15,18 @@ use crate::terminal::emoji;
 use crate::terminal::message::{Message, StdErr, StdOut};
 use crate::upload;
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct PublishOutput {
+    pub success: bool,
+    pub name: String,
+    pub urls: Vec<String>,
+}
+
 pub fn publish(
     user: &GlobalUser,
     target: &mut Target,
     deploy_config: DeployConfig,
+    is_json_out: bool,
 ) -> Result<(), failure::Error> {
     validate_target_required_fields_present(target)?;
 
@@ -30,7 +39,7 @@ pub fn publish(
         }
         Err(e) => Err(e),
     }?;
-
+    let mut jsonout = PublishOutput::default();
     if let Some(site_config) = &target.site {
         let path = &site_config.bucket.clone();
         validate_bucket_location(path)?;
@@ -69,7 +78,21 @@ pub fn publish(
         // Next, upload and deploy the worker with the updated asset_manifest
         upload::script(&upload_client, &target, Some(asset_manifest))?;
 
-        deploy::worker(&user, &deploy_config)?;
+        match deploy::worker(&user, &deploy_config) {
+            Ok((result_msg, urls)) => {
+                if is_json_out {
+                    jsonout.success = true;
+                    jsonout.name = target.name.clone();
+                    jsonout.urls = urls;
+                    StdErr::success(&result_msg);
+                    StdOut::json_out(&jsonout);
+                } else {
+                    StdOut::success(&result_msg);
+                }
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }?;
 
         // Finally, remove any stale files
         if !to_delete.is_empty() {
@@ -102,7 +125,21 @@ pub fn publish(
 
         upload::script(&upload_client, &target, None)?;
 
-        deploy::worker(&user, &deploy_config)?;
+        match deploy::worker(&user, &deploy_config) {
+            Ok((result_msg, urls)) => {
+                if is_json_out {
+                    jsonout.success = true;
+                    jsonout.name = target.name.clone();
+                    jsonout.urls = urls;
+                    StdErr::success(&result_msg);
+                    StdOut::json_out(&jsonout);
+                } else {
+                    StdOut::success(&result_msg);
+                }
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }?;
     }
 
     Ok(())

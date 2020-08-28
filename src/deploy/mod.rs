@@ -5,20 +5,22 @@ use crate::commands::subdomain::Subdomain;
 use crate::http;
 use crate::settings::global_user::GlobalUser;
 use crate::settings::toml::{DeployConfig, Zoneless};
-use crate::terminal::message::{Message, StdOut};
-pub fn worker(user: &GlobalUser, deploy_config: &DeployConfig) -> Result<(), failure::Error> {
+
+pub fn worker(
+    user: &GlobalUser,
+    deploy_config: &DeployConfig,
+) -> Result<(String, Vec<String>), failure::Error> {
     match deploy_config {
         DeployConfig::Zoneless(zoneless_config) => {
             // this is a zoneless deploy
             log::info!("publishing to workers.dev subdomain");
             let deploy_address = publish_zoneless(user, zoneless_config)?;
-
-            StdOut::success(&format!(
-                "Successfully published your script to {}",
-                deploy_address
-            ));
-
-            Ok(())
+            let mut addresses = Vec::new();
+            addresses.push(deploy_address.clone());
+            Ok((
+                format!("Successfully published your script to {}", deploy_address),
+                addresses,
+            ))
         }
         DeployConfig::Zoned(zoned_config) => {
             // this is a zoned deploy
@@ -29,12 +31,13 @@ pub fn worker(user: &GlobalUser, deploy_config: &DeployConfig) -> Result<(), fai
             let display_results: Vec<String> =
                 published_routes.iter().map(|r| format!("{}", r)).collect();
 
-            StdOut::success(&format!(
-                "Deployed to the following routes:\n{}",
-                display_results.join("\n")
-            ));
-
-            Ok(())
+            Ok((
+                format!(
+                    "Deployed to the following routes:\n{}",
+                    &display_results.join("\n")
+                ),
+                display_results,
+            ))
         }
     }
 }
